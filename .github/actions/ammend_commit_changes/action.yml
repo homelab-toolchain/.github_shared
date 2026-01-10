@@ -1,0 +1,56 @@
+inputs:
+  github-repository:
+    description: "github repository"
+    required: true
+  github-token:
+      description: "github token"
+      required: true
+  commit-message:
+    description: "commit message"
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+
+    - name: Set Git Identity
+      shell: bash
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+
+    - name: Commit (with ammend if possible) & Push
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        git add .
+
+        if git diff --cached --quiet; then
+          echo "Nothing to commit and push."
+          exit 0
+        fi
+
+        git remote set-url origin "https://x-access-token:${{ inputs.github-token }}@github.com/${{ inputs.github-repository }}.git"
+
+        LAST_SUBJECT="$(git log -1 --pretty=%s || echo "")"
+        BASE_SUBJECT="${{ inputs.commit-message }}"
+
+        if [ "$LAST_SUBJECT" = "$BASE_SUBJECT" ]; then
+          echo "Last commit has same subject -> trying amend."
+          if git commit --amend -m "$BASE_SUBJECT"; then
+            git push --force-with-lease origin HEAD
+          else
+            echo "Amend failed -> creating normal commit instead."
+            git commit -m "$BASE_SUBJECT"
+            git push origin HEAD
+          fi
+        else
+          git commit -m "$BASE_SUBJECT"
+          git push origin HEAD
+        fi
+      env:
+        GIT_AUTHOR_NAME: github-actions[bot]
+        GIT_AUTHOR_EMAIL: github-actions[bot]@users.noreply.github.com
+        GIT_COMMITTER_NAME: github-actions[bot]
+        GIT_COMMITTER_EMAIL: github-actions[bot]@users.noreply.github.com
